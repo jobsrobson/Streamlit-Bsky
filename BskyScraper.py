@@ -4,6 +4,8 @@
 # Veja o README.md para mais informações.
 
 import subprocess
+import sys
+import os
 # Verificar e instalar atproto se não estiver instalado
 try:
     import atproto
