@@ -10,7 +10,7 @@ import sys
 import signal
 
 # Diretório onde o script está localizado
-SCRIPT_PATH = 'scripts/BskyScraper.py'
+SCRIPT_PATH = 'BskyScraper.py'
 
 st.title('Coleta de Postagens no Bluesky')
 st.write('Clique no botão para iniciar a coleta de postagens em tempo real do Bluesky por 60 segundos.')
