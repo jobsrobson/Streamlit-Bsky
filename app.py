@@ -105,13 +105,10 @@ if st.button('Iniciar Coleta'):
         progress_bar.progress(min(int((time.time() - start_time) / 60 * 100), 100))
         time.sleep(0.5)
 
-    st.write("A coleta está em andamento. Aguarde 60 segundos ou clique em 'Encerrar Coleta'.")
-
-if st.button('Encerrar Coleta'):
-    st.write('Encerrando a coleta...')
     for proc in processes:
         proc.terminate()
         proc.join()
+
     st.success(f"Coleta finalizada! {len(collected_data)} postagens coletadas.")
 
     st.subheader("Visualização dos Dados Coletados")
