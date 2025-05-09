@@ -1,0 +1,15 @@
+atproto==0.0.61
+Flask==2.3.2
+Flask-SocketIO==5.3.3
+python-engineio==4.3.1
+python-socketio==5.7.1
+langdetect
+pandas
+numpy
+matplotlib
+textblob
+vaderSentiment
+nltk
+wordcloud
+scikit-learn
+altair
