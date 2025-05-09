@@ -1,136 +1,73 @@
 import streamlit as st
-import time
+import subprocess
+import os
 import json
-import multiprocessing
-import logging
-import pandas as pd
-from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
+import time
+from pathlib import Path
 
-# Configuração do logging
-logging.basicConfig(filename='execution_log.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+LOG_FILE = "log.txt"
+DATA_FILE = "bluesky_data.jsonl"
 
-st.title('Coleta de Postagens no Bluesky')
-st.write('Clique no botão para iniciar a coleta de postagens em tempo real do Bluesky por 60 segundos.')
+st.title("Bsky Realtime Analyser")
 
-processes = []
-manager = multiprocessing.Manager()
-collected_data = manager.list()
+# Function to clear log file
+def clear_log_file():
+    with open(LOG_FILE, "w") as log_file:
+        log_file.write("")
 
-# Inicializa um DataFrame vazio
-data_columns = ['author', 'text', 'created_at', 'uri']
-dataframe = pd.DataFrame(columns=data_columns)
+# Function to run the scraper script
+def run_scraper():
+    clear_log_file()
+    with open(LOG_FILE, "w") as log_file:
+        process = subprocess.Popen(['python', 'BskyScraper-All-60s.py', '-o', DATA_FILE], stdout=log_file, stderr=log_file)
+    return process
 
+# Function to read log file
+def read_log_file():
+    with open(LOG_FILE, "r") as log_file:
+        return log_file.read()
 
-def worker_process(queue, post_count, lock, stop_event, start_time, collected_data, progress_queue):
-    resolver = IdResolver(cache=DidInMemoryCache())
-    while not stop_event.is_set():
-        try:
-            message = queue.get(timeout=1)
-            process_message(message, resolver, post_count, lock, start_time, collected_data, progress_queue)
-        except multiprocessing.queues.Empty:
-            continue
-        except Exception as e:
-            error_message = f'Erro no worker: {e}'
-            progress_queue.put(error_message)
-            logging.error(error_message)
+# Function to read data file
+def read_data_file():
+    data = []
+    if Path(DATA_FILE).exists():
+        with open(DATA_FILE, "r") as data_file:
+            data = [json.loads(line) for line in data_file.readlines()]
+    return data
 
+# UI Components
+if 'process' not in st.session_state:
+    st.session_state['process'] = None
 
-def client_process(queue, stop_event, progress_queue):
-    client = FirehoseSubscribeReposClient()
+if 'progress' not in st.session_state:
+    st.session_state['progress'] = 0
 
-    def message_handler(message):
-        if stop_event.is_set():
-            client.stop()
-            return
-        queue.put(message)
+if st.button("Iniciar captura"):
+    st.session_state['process'] = run_scraper()
+    st.session_state['progress'] = 0
 
-    try:
-        client.start(message_handler)
-    except Exception as e:
-        error_message = f'Erro no cliente: {e}'
-        progress_queue.put(error_message)
-        logging.error(error_message)
+progress_bar = st.progress(st.session_state['progress'])
+log_container = st.empty()
 
-
-def process_message(message, resolver, post_count, lock, start_time, collected_data, progress_queue):
-    try:
-        commit = parse_subscribe_repos_message(message)
-        if not hasattr(commit, 'ops'):
-            return
-
-        for op in commit.ops:
-            if op.action == 'create' and op.path.startswith('app.bsky.feed.post/'):
-                author_handle = _resolve_author_handle(commit.repo, resolver)
-                car = CAR.from_bytes(commit.blocks)
-                for record in car.blocks.values():
-                    if isinstance(record, dict) and record.get('$type') == 'app.bsky.feed.post':
-                        post_data = _extract_post_data(record, author_handle)
-                        collected_data.append(post_data)
-                        with post_count.get_lock():
-                            post_count.value += 1
-                        progress_message = f'Post coletado por @{author_handle}: {post_data["text"][:50]}...'
-                        progress_queue.put(progress_message)
-                        logging.info(progress_message)
-
-    except Exception as e:
-        error_message = f'Erro ao processar mensagem: {e}'
-        progress_queue.put(error_message)
-        logging.error(error_message)
-
-
-def _resolve_author_handle(repo, resolver):
-    try:
-        resolved_info = resolver.did.resolve(repo)
-        return resolved_info.also_known_as[0].split('at://')[1] if resolved_info.also_known_as else repo
-    except Exception as e:
-        logging.error(f'Erro ao resolver handle: {e}')
-        return repo
-
-
-def _extract_post_data(record, author_handle):
-    return {
-        'author': author_handle,
-        'text': record.get('text', ''),
-        'created_at': record.get('createdAt', ''),
-        'uri': record.get('uri', '')
-    }
-
-if st.button('Iniciar Coleta'):
-    st.write('Iniciando a coleta...')
-    post_count = multiprocessing.Value('i', 0)
-    start_time = multiprocessing.Value('d', time.time())
-    lock = multiprocessing.Lock()
-    queue = multiprocessing.Queue()
-    stop_event = multiprocessing.Event()
-    progress_queue = multiprocessing.Queue()
-
-    client_proc = multiprocessing.Process(target=client_process, args=(queue, stop_event, progress_queue))
-    client_proc.start()
-    processes.append(client_proc)
-
-    worker = multiprocessing.Process(target=worker_process, args=(queue, post_count, lock, stop_event, start_time, collected_data, progress_queue))
-    worker.start()
-    processes.append(worker)
-
-    progress_bar = st.progress(0)
-    progress_text = st.empty()
+if st.session_state['process']:
     start_time = time.time()
+    while st.session_state['process'].poll() is None:
+        elapsed = time.time() - start_time
+        progress = min(1.0, elapsed / 60)
+        st.session_state['progress'] = progress
+        progress_bar.progress(progress)
+        log_container.text(read_log_file())
+        time.sleep(1)
 
-    while time.time() - start_time < 60:
-        if not progress_queue.empty():
-            message = progress_queue.get()
-            progress_text.text(message)
-        progress_bar.progress(min(int((time.time() - start_time) / 60 * 100), 100))
-        time.sleep(0.5)
+    st.session_state['process'] = None
+    st.session_state['progress'] = 1.0
+    progress_bar.progress(1.0)
+    st.write("Captura finalizada!")
 
-    for proc in processes:
-        proc.terminate()
-        proc.join()
-
-    # Atualiza o DataFrame com os dados coletados
-    dataframe = pd.DataFrame(list(collected_data), columns=data_columns)
-
-    st.success(f"Coleta finalizada! {len(collected_data)} postagens coletadas.")
-
-    st.subheader("Visualização dos Dados Coletados")
-    st.dataframe(dataframe)
+# Display collected data
+posts = read_data_file()
+if posts:
+    st.write("Postagens coletadas:")
+    st.json(posts)
+else:
+    st.write("Nenhuma postagem coletada ainda.")

@@ -4,14 +4,6 @@
 # Veja o README.md para mais informações.
 
 import subprocess
-import sys
-import os
-# Verificar e instalar atproto se não estiver instalado
-try:
-    import atproto
-except ImportError:
-    subprocess.run([sys.executable, "-m", "pip", "install", "atproto==0.0.61"])
-
 from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
 import json
 import time
@@ -137,7 +129,7 @@ if __name__ == "__main__":
         workers.append(p)
     
     try:
-        while time.time() - start_time.value < 60:  # em segundos. 900=15 minutos 
+        while time.time() - start_time.value < 10:  # em segundos. 900=15 minutos 
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterrompido pelo usuário.")
