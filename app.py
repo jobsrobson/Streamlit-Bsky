@@ -2,7 +2,11 @@ import streamlit as st
 import time
 import json
 import multiprocessing
+import logging
 from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
+
+# Configuração do logging
+logging.basicConfig(filename='execution_log.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.title('Coleta de Postagens no Bluesky')
 st.write('Clique no botão para iniciar a coleta de postagens em tempo real do Bluesky por 60 segundos.')
@@ -20,7 +24,9 @@ def worker_process(queue, post_count, lock, stop_event, start_time, collected_da
         except multiprocessing.queues.Empty:
             continue
         except Exception as e:
-            progress_queue.put(f'Erro no worker: {e}')
+            error_message = f'Erro no worker: {e}'
+            progress_queue.put(error_message)
+            logging.error(error_message)
 
 
 def client_process(queue, stop_event, progress_queue):
@@ -35,7 +41,9 @@ def client_process(queue, stop_event, progress_queue):
     try:
         client.start(message_handler)
     except Exception as e:
-        progress_queue.put(f'Erro no cliente: {e}')
+        error_message = f'Erro no cliente: {e}'
+        progress_queue.put(error_message)
+        logging.error(error_message)
 
 
 def process_message(message, resolver, post_count, lock, start_time, collected_data, progress_queue):
@@ -54,10 +62,14 @@ def process_message(message, resolver, post_count, lock, start_time, collected_d
                         collected_data.append(post_data)
                         with post_count.get_lock():
                             post_count.value += 1
-                        progress_queue.put(f'Post coletado por @{author_handle}: {post_data["text"][:50]}...')
+                        progress_message = f'Post coletado por @{author_handle}: {post_data["text"][:50]}...'
+                        progress_queue.put(progress_message)
+                        logging.info(progress_message)
 
     except Exception as e:
-        progress_queue.put(f'Erro ao processar mensagem: {e}')
+        error_message = f'Erro ao processar mensagem: {e}'
+        progress_queue.put(error_message)
+        logging.error(error_message)
 
 
 def _resolve_author_handle(repo, resolver):
@@ -65,6 +77,7 @@ def _resolve_author_handle(repo, resolver):
         resolved_info = resolver.did.resolve(repo)
         return resolved_info.also_known_as[0].split('at://')[1] if resolved_info.also_known_as else repo
     except Exception as e:
+        logging.error(f'Erro ao resolver handle: {e}')
         return repo
 
 
@@ -118,3 +131,9 @@ if st.button('Iniciar Coleta'):
         st.write(f"Data: {post['created_at']}")
         st.write(f"Link: {post['uri']}")
         st.write("---")
+
+    # Exibição do log
+    st.subheader("Log da Execução")
+    with open('execution_log.log', 'r') as log_file:
+        log_content = log_file.read()
+        st.text(log_content)
