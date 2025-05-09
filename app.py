@@ -7,6 +7,8 @@ from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message,
 st.title('Coleta de Postagens no Bluesky')
 st.write('Clique no botão para iniciar a coleta de postagens em tempo real do Bluesky por 60 segundos.')
 
+processes = []
+
 def worker_process(queue, post_count, lock, stop_event, start_time, collected_data):
     resolver = IdResolver(cache=DidInMemoryCache())
     while not stop_event.is_set():
@@ -80,16 +82,19 @@ if st.button('Iniciar Coleta'):
 
     client_proc = multiprocessing.Process(target=client_process, args=(queue, stop_event))
     client_proc.start()
+    processes.append(client_proc)
 
     worker = multiprocessing.Process(target=worker_process, args=(queue, post_count, lock, stop_event, start_time, collected_data))
     worker.start()
+    processes.append(worker)
 
-    time.sleep(60)
+    st.write("A coleta está em andamento. Aguarde 60 segundos ou clique em 'Encerrar Coleta'.")
 
-    stop_event.set()
-    client_proc.join()
-    worker.join()
-
+if st.button('Encerrar Coleta'):
+    st.write('Encerrando a coleta...')
+    for proc in processes:
+        proc.terminate()
+        proc.join()
     st.success(f"Coleta finalizada! {len(collected_data)} postagens coletadas.")
     st.json(list(collected_data))
 
