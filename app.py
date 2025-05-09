@@ -8,6 +8,7 @@ st.title('Coleta de Postagens no Bluesky')
 st.write('Clique no botão para iniciar a coleta de postagens em tempo real do Bluesky por 60 segundos.')
 
 processes = []
+collected_data = multiprocessing.Manager().list()
 
 def worker_process(queue, post_count, lock, stop_event, start_time, collected_data):
     resolver = IdResolver(cache=DidInMemoryCache())
