@@ -3,6 +3,7 @@ import time
 import json
 import multiprocessing
 import logging
+import pandas as pd
 from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
 
 # Configuração do logging
@@ -12,7 +13,12 @@ st.title('Coleta de Postagens no Bluesky')
 st.write('Clique no botão para iniciar a coleta de postagens em tempo real do Bluesky por 60 segundos.')
 
 processes = []
-collected_data = multiprocessing.Manager().list()
+manager = multiprocessing.Manager()
+collected_data = manager.list()
+
+# Inicializa um DataFrame vazio
+data_columns = ['author', 'text', 'created_at', 'uri']
+dataframe = pd.DataFrame(columns=data_columns)
 
 
 def worker_process(queue, post_count, lock, stop_event, start_time, collected_data, progress_queue):
@@ -83,9 +89,9 @@ def _resolve_author_handle(repo, resolver):
 
 def _extract_post_data(record, author_handle):
     return {
+        'author': author_handle,
         'text': record.get('text', ''),
         'created_at': record.get('createdAt', ''),
-        'author': author_handle,
         'uri': record.get('uri', '')
     }
 
@@ -96,7 +102,6 @@ if st.button('Iniciar Coleta'):
     lock = multiprocessing.Lock()
     queue = multiprocessing.Queue()
     stop_event = multiprocessing.Event()
-    collected_data = multiprocessing.Manager().list()
     progress_queue = multiprocessing.Queue()
 
     client_proc = multiprocessing.Process(target=client_process, args=(queue, stop_event, progress_queue))
@@ -122,18 +127,10 @@ if st.button('Iniciar Coleta'):
         proc.terminate()
         proc.join()
 
+    # Atualiza o DataFrame com os dados coletados
+    dataframe = pd.DataFrame(list(collected_data), columns=data_columns)
+
     st.success(f"Coleta finalizada! {len(collected_data)} postagens coletadas.")
 
     st.subheader("Visualização dos Dados Coletados")
-    for post in collected_data:
-        st.write(f"Autor: @{post['author']}")
-        st.write(f"Texto: {post['text']}")
-        st.write(f"Data: {post['created_at']}")
-        st.write(f"Link: {post['uri']}")
-        st.write("---")
-
-    # Exibição do log
-    st.subheader("Log da Execução")
-    with open('execution_log.log', 'r') as log_file:
-        log_content = log_file.read()
-        st.text(log_content)
+    st.dataframe(dataframe)
