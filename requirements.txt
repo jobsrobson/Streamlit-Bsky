@@ -1,4 +1,4 @@
-atproto
+atproto==0.0.61
 streamlit
 langdetect
 pandas
