@@ -1,7 +1,13 @@
 import streamlit as st
 import subprocess
 import os
+from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
+import json
 import time
+import argparse
+import multiprocessing
+import sys
+import signal
 
 # Diretório onde o script está localizado
 SCRIPT_PATH = 'scripts/BskyScraper.py'
