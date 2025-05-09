@@ -1,37 +1,99 @@
 import streamlit as st
-import subprocess
-import os
-import atproto
-import json
 import time
-import argparse
+import json
 import multiprocessing
-import sys
-import signal
-
-# Diretório onde o script está localizado
-SCRIPT_PATH = 'BskyScraper.py'
+from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
 
 st.title('Coleta de Postagens no Bluesky')
 st.write('Clique no botão para iniciar a coleta de postagens em tempo real do Bluesky por 60 segundos.')
 
+def worker_process(queue, post_count, lock, stop_event, start_time, collected_data):
+    resolver = IdResolver(cache=DidInMemoryCache())
+    while not stop_event.is_set():
+        try:
+            message = queue.get(timeout=1)
+            process_message(message, resolver, post_count, lock, start_time, collected_data)
+        except multiprocessing.queues.Empty:
+            continue
+        except Exception as e:
+            st.error(f"Worker error: {e}")
+
+
+def client_process(queue, stop_event):
+    client = FirehoseSubscribeReposClient()
+
+    def message_handler(message):
+        if stop_event.is_set():
+            client.stop()
+            return
+        queue.put(message)
+
+    try:
+        client.start(message_handler)
+    except Exception as e:
+        st.error(f"Client process error: {e}")
+
+
+def process_message(message, resolver, post_count, lock, start_time, collected_data):
+    try:
+        commit = parse_subscribe_repos_message(message)
+        if not hasattr(commit, 'ops'):
+            return
+
+        for op in commit.ops:
+            if op.action == 'create' and op.path.startswith('app.bsky.feed.post/'):
+                author_handle = _resolve_author_handle(commit.repo, resolver)
+                car = CAR.from_bytes(commit.blocks)
+                for record in car.blocks.values():
+                    if isinstance(record, dict) and record.get('$type') == 'app.bsky.feed.post':
+                        post_data = _extract_post_data(record, author_handle)
+                        collected_data.append(post_data)
+
+    except Exception as e:
+        st.error(f"Error processing message: {e}")
+
+
+def _resolve_author_handle(repo, resolver):
+    try:
+        resolved_info = resolver.did.resolve(repo)
+        return resolved_info.also_known_as[0].split('at://')[1] if resolved_info.also_known_as else repo
+    except Exception as e:
+        return repo
+
+
+def _extract_post_data(record, author_handle):
+    return {
+        'text': record.get('text', ''),
+        'created_at': record.get('createdAt', ''),
+        'author': author_handle,
+        'uri': record.get('uri', '')
+    }
+
 if st.button('Iniciar Coleta'):
     st.write('Iniciando a coleta...')
-    start_time = time.time()
-    try:
-        # Executa o script de coleta
-        result = subprocess.run(['python', SCRIPT_PATH], capture_output=True, text=True)
-        duration = time.time() - start_time
-        st.write(f'Coleta finalizada em {duration:.2f} segundos.')
-        st.text(result.stdout)
-        if result.stderr:
-            st.error(f'Erro durante a coleta: {result.stderr}')
-    except Exception as e:
-        st.error(f'Ocorreu um erro ao executar o script: {e}')
+    post_count = multiprocessing.Value('i', 0)
+    start_time = multiprocessing.Value('d', time.time())
+    lock = multiprocessing.Lock()
+    queue = multiprocessing.Queue()
+    stop_event = multiprocessing.Event()
+    collected_data = multiprocessing.Manager().list()
 
+    client_proc = multiprocessing.Process(target=client_process, args=(queue, stop_event))
+    client_proc.start()
 
-import sys
-import os
+    worker = multiprocessing.Process(target=worker_process, args=(queue, post_count, lock, stop_event, start_time, collected_data))
+    worker.start()
 
-print("Python path:", sys.executable)
-print("Current working directory:", os.getcwd())
+    time.sleep(60)
+
+    stop_event.set()
+    client_proc.join()
+    worker.join()
+
+    st.success(f"Coleta finalizada! {len(collected_data)} postagens coletadas.")
+    st.json(list(collected_data))
+
+    # Exibição da visualização do JSON
+    st.subheader("Visualização dos Dados Coletados")
+    for post in collected_data:
+        st.write(post)
