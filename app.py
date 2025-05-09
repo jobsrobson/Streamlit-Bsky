@@ -26,7 +26,7 @@ def clear_log_file():
 # Function to run the scraper script
 def run_scraper():
     clear_log_file()
-    process = subprocess.Popen(['python', 'BskyScraper-All-60s.py'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(['python', 'BskyScraper-All-60s.py'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     return process
 
 # Function to read log file
@@ -37,7 +37,7 @@ def read_log_file():
 # Function to process data in memory
 def process_data(line):
     try:
-        post_data = json.loads(line)
+        post_data = json.loads(line.strip())
         post_df = pd.DataFrame([post_data])
         st.session_state['data'] = pd.concat([st.session_state['data'], post_df], ignore_index=True)
     except json.JSONDecodeError:
@@ -63,7 +63,7 @@ if st.session_state['process']:
         # Read output and process data
         output = st.session_state['process'].stdout.readline()
         if output:
-            log_container.text(output.decode('utf-8'))
+            log_container.text(output.strip())
             process_data(output)
 
         time.sleep(1)
