@@ -1,7 +1,7 @@
 import streamlit as st
 import subprocess
 import os
-from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
+import atproto
 import json
 import time
 import argparse
