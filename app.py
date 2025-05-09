@@ -1,81 +1,96 @@
 import streamlit as st
-import subprocess
-import os
 import json
 import time
 import pandas as pd
-from io import StringIO
-
-LOG_FILE = "log.txt"
+from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
 
 st.title("Bsky Realtime Analyser")
 
-# Initialize session state
-if 'process' not in st.session_state:
-    st.session_state['process'] = None
+# Inicialização do estado da aplicação
 if 'progress' not in st.session_state:
     st.session_state['progress'] = 0
 if 'data' not in st.session_state:
     st.session_state['data'] = pd.DataFrame(columns=['text', 'created_at', 'author', 'uri', 'has_images', 'reply_to'])
+if 'collecting' not in st.session_state:
+    st.session_state['collecting'] = False
 
-# Function to clear log file
-def clear_log_file():
-    with open(LOG_FILE, "w") as log_file:
-        log_file.write("")
-
-# Function to run the scraper script
-def run_scraper():
-    clear_log_file()
-    process = subprocess.Popen(['python', 'BskyScraper-All-60s.py'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    return process
-
-# Function to read log file
-def read_log_file():
-    with open(LOG_FILE, "r") as log_file:
-        return log_file.read()
-
-# Function to process data in memory
-def process_data(line):
+def process_post(record, author, path):
+    """Processa um único post e o insere no dataframe."""
     try:
-        post_data = json.loads(line.strip())
+        post_data = {
+            'text': record.get('text', ''),
+            'created_at': record.get('createdAt', ''),
+            'author': author,
+            'uri': f'at://{author}/{path}',
+            'has_images': 'embed' in record,
+            'reply_to': record.get('reply', {}).get('parent', {}).get('uri')
+        }
         post_df = pd.DataFrame([post_data])
         st.session_state['data'] = pd.concat([st.session_state['data'], post_df], ignore_index=True)
-    except json.JSONDecodeError:
-        pass
+    except Exception as e:
+        st.warning(f"Erro ao processar post: {e}")
 
-# UI Components
-if st.button("Iniciar captura"):
-    st.session_state['process'] = run_scraper()
-    st.session_state['progress'] = 0
-
-progress_bar = st.progress(st.session_state['progress'])
-log_container = st.empty()
-
-# Real-time data processing
-if st.session_state['process']:
+def collect_data():
+    """Coleta dados por 10 segundos."""
+    st.session_state['collecting'] = True
     start_time = time.time()
-    while st.session_state['process'].poll() is None:
-        elapsed = time.time() - start_time
-        progress = min(1.0, elapsed / 60)
-        st.session_state['progress'] = progress
-        progress_bar.progress(progress)
 
-        # Read output and process data
-        output = st.session_state['process'].stdout.readline()
-        if output:
-            log_container.text(output.strip())
-            process_data(output)
+    resolver = IdResolver(cache=DidInMemoryCache())
+    client = FirehoseSubscribeReposClient()
 
-        time.sleep(1)
+    try:
+        def process_message(message):
+            if time.time() - start_time >= 10:
+                client.stop()
+                st.session_state['collecting'] = False
+                st.success("Captura finalizada!")
+                return
 
-    st.session_state['process'] = None
-    st.session_state['progress'] = 1.0
-    progress_bar.progress(1.0)
-    st.write("Captura finalizada!")
+            try:
+                commit = parse_subscribe_repos_message(message)
+                if not hasattr(commit, 'ops'):
+                    return
 
-# Display collected data
+                for op in commit.ops:
+                    if op.action == 'create' and op.path.startswith('app.bsky.feed.post/'):
+                        car = CAR.from_bytes(commit.blocks)
+                        for record in car.blocks.values():
+                            if isinstance(record, dict) and record.get('$type') == 'app.bsky.feed.post':
+                                process_post(record, commit.repo, op.path)
+            except Exception as e:
+                st.warning(f"Erro ao processar mensagem: {e}")
+
+        # Inicia o cliente Firehose
+        client.start(process_message)
+
+        # Controle do progresso
+        while st.session_state['collecting']:
+            elapsed = time.time() - start_time
+            st.session_state['progress'] = min(1.0, elapsed / 10)
+            time.sleep(0.5)
+
+    except Exception as e:
+        st.error(f"Erro durante a captura: {e}")
+        st.session_state['collecting'] = False
+
+# Interface do usuário
+if st.button("Iniciar captura") and not st.session_state['collecting']:
+    # Limpa os dados anteriores
+    st.session_state['data'] = pd.DataFrame(columns=['text', 'created_at', 'author', 'uri', 'has_images', 'reply_to'])
+    st.session_state['progress'] = 0
+    collect_data()
+
+# Exibição da barra de progresso
+st.progress(st.session_state['progress'])
+
+# Exibição dos dados coletados
 if not st.session_state['data'].empty:
     st.write("Postagens coletadas:")
     st.dataframe(st.session_state['data'])
 else:
     st.write("Nenhuma postagem coletada ainda.")
+# Exibição de mensagens de erro ou sucesso
+if st.session_state['collecting']:
+    st.info("Coletando dados... Aguarde.")
+else:
+    st.info("Clique no botão para iniciar a coleta de dados.")
