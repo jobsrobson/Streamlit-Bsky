@@ -10,10 +10,7 @@ nltk
 wordcloud
 scikit-learn
 altair
-json
-time
 argparse
 multiprocessing
 sys
 signal
-os
