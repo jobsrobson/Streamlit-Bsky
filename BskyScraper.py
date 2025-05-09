@@ -3,6 +3,13 @@
 # Esta versão coleta postagens em todos os idiomas.
 # Veja o README.md para mais informações.
 
+import subprocess
+# Verificar e instalar atproto se não estiver instalado
+try:
+    import atproto
+except ImportError:
+    subprocess.run([sys.executable, "-m", "pip", "install", "atproto==0.0.61"])
+
 from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
 import json
 import time

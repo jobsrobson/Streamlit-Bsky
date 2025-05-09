@@ -29,3 +29,9 @@ if st.button('Iniciar Coleta'):
     except Exception as e:
         st.error(f'Ocorreu um erro ao executar o script: {e}')
 
+
+import sys
+import os
+
+print("Python path:", sys.executable)
+print("Current working directory:", os.getcwd())
