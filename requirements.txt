@@ -1,5 +1,6 @@
 atproto==0.0.61
 streamlit
+stqdm
 langdetect
 pandas
 numpy
