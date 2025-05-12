@@ -24,6 +24,7 @@ class BskyDataCollectorApp:
         self._initialize_session_state()
         self.resolver_cache = DidInMemoryCache()
 
+    # Função de Inicialização do estado da sessão do Streamlit
     def _initialize_session_state(self):
         if 'data' not in st.session_state:
             st.session_state['data'] = []
@@ -38,6 +39,8 @@ class BskyDataCollectorApp:
         if 'data_queue' not in st.session_state:
             st.session_state['data_queue'] = multiprocessing.Queue()
 
+
+    # Função para Processamento de Mensagens Recebidas
     def _process_message(self, message, data_queue):
         try:
             commit = parse_subscribe_repos_message(message)
@@ -52,12 +55,16 @@ class BskyDataCollectorApp:
         except Exception as e:
             print(f"Error processing message in thread: {e}")
 
+
+    # Função para detecção de Idioma
     def _is_portuguese(self, text):
         try:
             return detect(text) == 'en'
         except Exception:
             return False
 
+
+    # Função para extrair dados do Objeto CAR
     def _extract_post_data(self, commit, op):
         try:
             car = CAR.from_bytes(commit.blocks)
@@ -74,49 +81,71 @@ class BskyDataCollectorApp:
                         'reply_to': record.get('reply', {}).get('parent', {}).get('uri')
                     }
         except Exception as e:
-            print(f"Error extracting data: {e}")
+            st.toast(f"Error extracting data: {e}", icon=":material/dangerous:")
             return None
 
+
+    # Thread para coleta de mensagens em segundo plano
     def _collect_messages_threaded(self, stop_event, data_queue):
         client = FirehoseSubscribeReposClient()
         try:
             client.start(lambda message: self._process_message(message, data_queue))
         except Exception as e:
-            print(f"Erro no thread de coleta: {e}")
+            st.toast(f"Error in collection thread: {e}", icon=":material/dangerous:")
         finally:
             client.stop()
 
-    def collect_data(self):
+
+    # Função de Coleta de Posts
+    def collect_data(self):            
         stop_event = st.session_state['stop_event']
         data_queue = st.session_state['data_queue']
         st.session_state['collection_ended'] = False
 
         if st.session_state['collecting'] and not st.session_state['collection_ended']:
-            stop_button_pressed = st.button("Parar Coleta", icon=":material/stop_circle:")
+            stop_button_pressed = st.button("Parar Coleta", icon=":material/stop_circle:", help="Clique para parar a coleta de dados. Os dados já coletados serão mantidos na memória.")
             if stop_button_pressed:
                 st.session_state['stop_event'].set()
                 st.session_state['collecting'] = False
 
         start_time = time.time()
-        collection_duration = 5             # Duração da coleta em segundos	
-
+        collection_duration = 20             # Duração da coleta em segundos	
         collecting_data = st.session_state['collecting']
-
 
         if collecting_data:
             collection_thread = threading.Thread(target=self._collect_messages_threaded, args=(stop_event, data_queue))
             collection_thread.daemon = True
             collection_thread.start()
 
-            with st.spinner(f"Coletando posts do Bluesky durante {collection_duration} segundos. Aguarde!"):
-                while collecting_data and not stop_event.is_set() and (time.time() - start_time < collection_duration):
-                    try:
-                        while not data_queue.empty():
-                            st.session_state['data'].append(data_queue.get_nowait())
-                    except queue.Empty:
-                        pass
-                    time.sleep(0.1)
-                    collecting_data = st.session_state['collecting']
+            # Exibe mensagens de status enquanto coleta
+            with st.status(f"Coletando posts do Bluesky durante {collection_duration} segundos. Aguarde!") as status:
+                mensagens = [
+                    "Estabelecendo conexão com o Firehose...",
+                    "Conexão estabelecida com sucesso!",
+                    "Autenticando...",
+                    "Autenticação concluída!",
+                    "Organizando a fila...",
+                    "Atualizando lista...",
+                    "Coletando posts...",
+                ]
+                # Exibe cada mensagem uma vez, na ordem
+                for i, msg in enumerate(mensagens):
+                    status.update(label=msg)
+                    # Durante as mensagens intermediárias, verifica se já deve parar
+                    if i < len(mensagens) - 1:
+                        time.sleep(1 if i != 0 else 2)
+                        if stop_event.is_set() or (time.time() - start_time >= collection_duration):
+                            break
+                    else:
+                        # Última mensagem: permanece até o fim da coleta
+                        while collecting_data and not stop_event.is_set() and (time.time() - start_time < collection_duration):
+                            try:
+                                while not data_queue.empty():
+                                    st.session_state['data'].append(data_queue.get_nowait())
+                            except queue.Empty:
+                                pass
+                            time.sleep(0.5)
+                        collecting_data = st.session_state['collecting']
 
             st.session_state['collecting'] = False
             st.session_state['collection_ended'] = True
@@ -160,9 +189,19 @@ class BskyDataCollectorApp:
     def display_data(self):
         if len(st.session_state['data']) > 0:
             num_rows = len(st.session_state['data'])
-            st.success(f"Coleta finalizada com sucesso! {num_rows} posts foram coletados.", icon=":material/check_circle:")
+            num_has_images = sum(1 for post in st.session_state['data'] if post.get('has_images', False))
+            num_is_reply = sum(1 for post in st.session_state['data'] if post.get('reply_to', None) is not None)
+
+
+            st.toast(f"Coleta finalizada com sucesso!", icon=":material/check_circle:", )
             
-            st.metric(label="Total de Posts Coletados", value=num_rows)
+            col1, col2, col3 = st.columns(3, gap="small", border=True)
+            with col1:
+                st.metric(label="Total de Posts Coletados", value=num_rows)
+            with col2:
+                st.metric(label="Total de Posts com Imagens", value=num_has_images)
+            with col3:
+                st.metric(label="Total de Posts em Reply", value=num_is_reply)
 
             df = pd.DataFrame(st.session_state['data'])
             st.write(df)
@@ -172,7 +211,7 @@ class BskyDataCollectorApp:
             with left:
                 st.button("Próxima Etapa", icon=":material/arrow_forward:")  # Botão para ir para a próxima etapa
             with left:
-                if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({'data': [], 'collection_ended': False}), icon=":material/refresh:"):
+                if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({'data': [], 'collection_ended': False}), icon=":material/refresh:", help="Reiniciar a coleta de dados. Isso apagará os dados em memória!"):
                     self.collect_data()
                     st.rerun()
             with left:
@@ -203,6 +242,7 @@ class BskyDataCollectorApp:
                 st.session_state['collecting'] = True
                 st.session_state['stop_event'].clear()
                 st.session_state['data_queue'] = multiprocessing.Queue()
+                st.session_state['disable_start_button'] = True
                 self.collect_data()
 
         self.display_data()
