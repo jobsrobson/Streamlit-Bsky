@@ -126,7 +126,7 @@ class BskyDataCollectorApp:
                     "Autenticação concluída!",
                     "Organizando a fila...",
                     "Atualizando lista...",
-                    "Coletando posts...",
+                    "Coletando posts... Isso pode demorar alguns minutos.",
                 ]
                 # Exibe cada mensagem uma vez, na ordem
                 for i, msg in enumerate(mensagens):
@@ -207,21 +207,23 @@ class BskyDataCollectorApp:
             st.write(df)
             st.session_state['collected_df'] = df
 
-            left, middle, right = st.columns(3, vertical_alignment="bottom")
-            with left:
-                st.button("Próxima Etapa", icon=":material/arrow_forward:")  # Botão para ir para a próxima etapa
-            with left:
-                if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({'data': [], 'collection_ended': False}), icon=":material/refresh:", help="Reiniciar a coleta de dados. Isso apagará os dados em memória!"):
+            col1, col2, col3, col4 = st.columns([1, 2, 1, 1], gap="small")
+            with col1:
+                st.button("Próxima Etapa", icon=":material/arrow_forward:", use_container_width=True, type="primary")  # Botão para ir para a próxima etapa
+            with col3:
+                if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({'data': [], 'collection_ended': False}), icon=":material/refresh:", 
+                             help="Reinicie a coleta de dados. Isso apagará os dados em memória!", use_container_width=True):
                     self.collect_data()
                     st.rerun()
-            with left:
+            with col4:
                 st.download_button(
                     label="Baixar Dados",
                     data=df.to_json(orient='records'),
                     file_name='bsky_data.json',
                     mime='application/json',
                     help="Baixe os dados coletados em formato JSON.",
-                    icon=":material/download:"
+                    icon=":material/download:",
+                    use_container_width=True
                 )
  
         else:
