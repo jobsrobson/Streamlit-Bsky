@@ -1,5 +1,8 @@
 atproto==0.0.61
 streamlit
+transformers
+torch
+sentencepiece
 stqdm
 langdetect
 pandas
