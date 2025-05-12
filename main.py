@@ -9,6 +9,7 @@ import asyncio
 from langdetect import detect
 import queue
 from datetime import datetime
+from transformers import pipeline  # Importe o pipeline aqui
 
 class BskyDataCollectorApp:
     def __init__(self):
@@ -23,6 +24,7 @@ class BskyDataCollectorApp:
         """
         self._initialize_session_state()
         self.resolver_cache = DidInMemoryCache()
+        self.sentiment_pipeline = None  # Inicialize o pipeline de análise de sentimentos
 
     # Função de Inicialização do estado da sessão do Streamlit
     def _initialize_session_state(self):
@@ -38,7 +40,10 @@ class BskyDataCollectorApp:
             st.session_state['start_time'] = 0.0
         if 'data_queue' not in st.session_state:
             st.session_state['data_queue'] = multiprocessing.Queue()
-
+        if 'sentiment_results' not in st.session_state:
+            st.session_state['sentiment_results'] = []
+        if 'collected_df' not in st.session_state:
+            st.session_state['collected_df'] = pd.DataFrame()
 
     # Função para Processamento de Mensagens Recebidas
     def _process_message(self, message, data_queue):
@@ -55,14 +60,12 @@ class BskyDataCollectorApp:
         except Exception as e:
             print(f"Error processing message in thread: {e}")
 
-
     # Função para detecção de Idioma
     def _is_portuguese(self, text):
         try:
             return detect(text) == 'en'
         except Exception:
             return False
-
 
     # Função para extrair dados do Objeto CAR
     def _extract_post_data(self, commit, op):
@@ -84,7 +87,6 @@ class BskyDataCollectorApp:
             st.toast(f"Error extracting data: {e}", icon=":material/dangerous:")
             return None
 
-
     # Thread para coleta de mensagens em segundo plano
     def _collect_messages_threaded(self, stop_event, data_queue):
         client = FirehoseSubscribeReposClient()
@@ -95,9 +97,8 @@ class BskyDataCollectorApp:
         finally:
             client.stop()
 
-
     # Função de Coleta de Posts
-    def collect_data(self):            
+    def collect_data(self):
         stop_event = st.session_state['stop_event']
         data_queue = st.session_state['data_queue']
         st.session_state['collection_ended'] = False
@@ -109,7 +110,7 @@ class BskyDataCollectorApp:
                 st.session_state['collecting'] = False
 
         start_time = time.time()
-        collection_duration = 20             # Duração da coleta em segundos	
+        collection_duration = 10        # Duração da coleta em segundos
         collecting_data = st.session_state['collecting']
 
         if collecting_data:
@@ -145,7 +146,7 @@ class BskyDataCollectorApp:
                             except queue.Empty:
                                 pass
                             time.sleep(0.5)
-                        collecting_data = st.session_state['collecting']
+                            collecting_data = st.session_state['collecting']
 
             st.session_state['collecting'] = False
             st.session_state['collection_ended'] = True
@@ -155,79 +156,104 @@ class BskyDataCollectorApp:
 
     # Função de pré-processamento de texto
     def preprocess_text(self, text):
-       
         return text
-    
+
+
     # Função de análise de sentimentos
-    def analyze_sentiment(self):
+    def analyze_sentiment(self, status_obj): # Aceita o objeto de status como argumento
+        if not self.sentiment_pipeline:
+            self.sentiment_pipeline = pipeline(
+                model="lxyuan/distilbert-base-multilingual-cased-sentiments-student",
+                return_all_scores=False
+            )
+
+
         st.session_state['sentiment_results'] = []
+        updated_data = []
         if st.session_state['collection_ended'] and st.session_state['data']:
-            for post in st.session_state['data']:
-                processed_text = self.preprocess_text(post['text'])
-                # Realize a análise de sentimento usando a biblioteca escolhida
-                # Exemplo com NLTK:
-                # scores = self.sentiment_analyzer.polarity_scores(processed_text)
-                # sentiment = 'neutral'
-                # if scores['compound'] >= 0.05:
-                #     sentiment = 'positive'
-                # elif scores['compound'] <= -0.05:
-                #     sentiment = 'negative'
-                # Exemplo com spaCy:
-                # doc = self.nlp(processed_text)
-                # sentiment = doc._.sentiment # Se usar um pipeline de sentimento do spaCy
-                # Exemplo com Transformers:
-                # result = self.sentiment_pipeline(processed_text)[0]
-                # sentiment = result['label']
-
-                # Por enquanto, vamos adicionar um sentimento placeholder
-                sentiment = 'neutral'
-                st.session_state['sentiment_results'].append({'uri': post['uri'], 'sentiment': sentiment})
-
+            for i, post in enumerate(st.session_state['data']):
+                status_obj.update(label=f"Analisando post {i+1}/{len(st.session_state['data'])}: {post['text']}")
+                try:
+                    result = self.sentiment_pipeline(post['text'])[0]
+                    sentiment = result['label']
+                    updated_data.append({
+                        'text': post['text'],
+                        'created_at': post['created_at'],
+                        'author': post['author'],
+                        'uri': post['uri'],
+                        'has_images': post['has_images'],
+                        'reply_to': post['reply_to'],
+                        'sentiment': sentiment
+                    })
+                    st.session_state['sentiment_results'].append({'text': post['text'], 'sentiment': sentiment})
+                except Exception as e:
+                    st.error(f"Erro ao analisar o sentimento do post {post['text']}: {e}", icon=":material/error:")
+                    updated_data.append(post) # Mantém o post original em caso de erro
+            status_obj.update(label="Análise de sentimentos concluída!", state="complete", expanded=False)
+            st.session_state['data'] = updated_data
+        else:
+            st.error("Não há dados coletados para análise de sentimentos.", icon=":material/error:")
+            return
 
 
     # Pós-Coleta - Exibe os dados coletados
     def display_data(self):
         if len(st.session_state['data']) > 0:
-            num_rows = len(st.session_state['data'])
-            num_has_images = sum(1 for post in st.session_state['data'] if post.get('has_images', False))
-            num_is_reply = sum(1 for post in st.session_state['data'] if post.get('reply_to', None) is not None)
-
+            df_collected = pd.DataFrame(st.session_state['data'])
+            num_rows = len(df_collected)
+            num_has_images = df_collected['has_images'].sum()
+            num_is_reply = df_collected['reply_to'].notna().sum()
 
             st.toast(f"Coleta finalizada com sucesso!", icon=":material/check_circle:", )
-            
-            col1, col2, col3 = st.columns(3, gap="small", border=True)
-            with col1:
+
+            col1_metrics, col2_metrics, col3_metrics = st.columns(3, gap="small", border=True)
+            with col1_metrics:
                 st.metric(label="Total de Posts Coletados", value=num_rows)
-            with col2:
+            with col2_metrics:
                 st.metric(label="Total de Posts com Imagens", value=num_has_images)
-            with col3:
+            with col3_metrics:
                 st.metric(label="Total de Posts em Reply", value=num_is_reply)
 
-            df = pd.DataFrame(st.session_state['data'])
-            st.write(df)
-            st.session_state['collected_df'] = df
+            if not st.session_state.get('sentiment_results'):
+                st.subheader("Dados Coletados")
+                st.write(df_collected)
+                st.session_state['collected_df'] = df_collected
+            else:
+                st.session_state['collected_df'] = pd.DataFrame() # Limpa o dataframe coletado do estado
 
-            col1, col2, col3, col4 = st.columns([1, 2, 1, 1], gap="small")
-            with col1:
-                st.button("Próxima Etapa", icon=":material/arrow_forward:", use_container_width=True, type="primary")  # Botão para ir para a próxima etapa
-            with col3:
-                if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({'data': [], 'collection_ended': False}), icon=":material/refresh:", 
-                             help="Reinicie a coleta de dados. Isso apagará os dados em memória!", use_container_width=True):
+            col1_buttons, col2_buttons, col3_buttons, col4_buttons = st.columns([1, 2, 1, 1], gap="small")
+            status_container = st.empty() # Cria um container vazio para o status
+
+            with col1_buttons:
+                if st.button("Próxima Etapa", icon=":material/arrow_forward:", use_container_width=True, type="primary"):
+                    with status_container.status("Preparando o ambiente para a análise de sentimentos...") as status:
+                        self.analyze_sentiment(status) # Passe o objeto de status para a função
+                    st.rerun()
+            with col3_buttons:
+                if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({'data': [], 'collection_ended': False, 'sentiment_results': [], 'collected_df': pd.DataFrame()}), icon=":material/refresh:",
+                                    help="Reinicie a coleta de dados. Isso apagará os dados em memória!", use_container_width=True):
                     self.collect_data()
                     st.rerun()
-            with col4:
+            with col4_buttons:
                 st.download_button(
                     label="Baixar Dados",
-                    data=df.to_json(orient='records'),
+                    data=df_collected.to_json(orient='records'),
                     file_name='bsky_data.json',
                     mime='application/json',
                     help="Baixe os dados coletados em formato JSON.",
                     icon=":material/download:",
                     use_container_width=True
                 )
- 
+
         else:
             st.error("Não há nenhum post na memória. Clique em Iniciar Coleta para coletar alguns!", icon=":material/error:")
+
+        # Exibe os resultados da análise de sentimentos, se houver
+        if st.session_state.get('sentiment_results'):
+            st.subheader("Resultados da Análise de Sentimentos")
+            sentiment_df = pd.DataFrame(st.session_state['sentiment_results'])
+            st.write(sentiment_df)
+
 
 
     # Função Principal - Tela Inicial
@@ -248,7 +274,6 @@ class BskyDataCollectorApp:
                 self.collect_data()
 
         self.display_data()
-
 
 if __name__ == "__main__":
     app = BskyDataCollectorApp()
