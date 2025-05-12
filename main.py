@@ -8,8 +8,7 @@ import threading
 import asyncio
 from langdetect import detect
 import queue
-import pages.page2 as page2
-
+from datetime import datetime
 
 class BskyDataCollectorApp:
     def __init__(self):
@@ -103,6 +102,7 @@ class BskyDataCollectorApp:
 
         collecting_data = st.session_state['collecting']
 
+
         if collecting_data:
             collection_thread = threading.Thread(target=self._collect_messages_threaded, args=(stop_event, data_queue))
             collection_thread.daemon = True
@@ -123,13 +123,10 @@ class BskyDataCollectorApp:
             stop_event.set()
             st.rerun()
 
-    # Função que cria df para exportá-los para a página 2
-    def df(self):
-        return pd.DataFrame(st.session_state['data'])
 
     # Função de pré-processamento de texto
     def preprocess_text(self, text):
-        # Aqui você pode adicionar seu código de pré-processamento
+       
         return text
     
     # Função de análise de sentimentos
@@ -164,6 +161,9 @@ class BskyDataCollectorApp:
         if len(st.session_state['data']) > 0:
             num_rows = len(st.session_state['data'])
             st.success(f"Coleta finalizada com sucesso! {num_rows} posts foram coletados.", icon=":material/check_circle:")
+            
+            st.metric(label="Total de Posts Coletados", value=num_rows)
+
             df = pd.DataFrame(st.session_state['data'])
             st.write(df)
             st.session_state['collected_df'] = df
@@ -171,11 +171,11 @@ class BskyDataCollectorApp:
             left, middle, right = st.columns(3, vertical_alignment="bottom")
             with left:
                 st.button("Próxima Etapa", icon=":material/arrow_forward:")  # Botão para ir para a próxima etapa
-            with middle:
+            with left:
                 if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({'data': [], 'collection_ended': False}), icon=":material/refresh:"):
                     self.collect_data()
                     st.rerun()
-            with right:
+            with left:
                 st.download_button(
                     label="Baixar Dados",
                     data=df.to_json(orient='records'),
