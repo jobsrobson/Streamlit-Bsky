@@ -9,7 +9,7 @@ import asyncio
 from langdetect import detect
 import queue
 from datetime import datetime
-from transformers import pipeline  # Importe o pipeline aqui
+from transformers import pipeline
 
 class BskyDataCollectorApp:
     def __init__(self):
@@ -110,7 +110,7 @@ class BskyDataCollectorApp:
                 st.session_state['collecting'] = False
 
         start_time = time.time()
-        collection_duration = 10        # Duração da coleta em segundos
+        collection_duration = st.session_state.get('collection_duration', 10)  # Duração da coleta em segundos
         collecting_data = st.session_state['collecting']
 
         if collecting_data:
@@ -266,6 +266,9 @@ class BskyDataCollectorApp:
         st.sidebar.text("Coleta e Análise de Sentimentos em Tempo Real no Bluesky")
 
         if not st.session_state['collecting'] and not st.session_state['collection_ended']:
+            st.session_state['collection_duration'] = st.sidebar.slider(
+                "Duração da Coleta (segundos)", min_value=10, max_value=120, value=10, step=1
+            )
             if st.sidebar.button("Iniciar Coleta", icon=":material/play_circle:"):
                 st.session_state['collecting'] = True
                 st.session_state['stop_event'].clear()
