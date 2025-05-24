@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
-from stqdm import stqdm
 import time
 import multiprocessing
 import threading
@@ -10,6 +9,9 @@ from langdetect import detect
 import queue
 from datetime import datetime
 from transformers import pipeline
+import gc
+import torch
+import sys
 
 class BskyDataCollectorApp:
     def __init__(self):
@@ -25,6 +27,7 @@ class BskyDataCollectorApp:
         self._initialize_session_state()
         self.resolver_cache = DidInMemoryCache()
         self.sentiment_pipeline = None  # Inicializa o pipeline de análise de sentimentos
+
 
     # Função de Inicialização do estado da sessão do Streamlit
     def _initialize_session_state(self):
@@ -61,6 +64,7 @@ class BskyDataCollectorApp:
         except Exception as e:
             print(f"Error processing message in thread: {e}")
 
+
     # Função para detecção de Idioma
     def _is_portuguese(self, text):
         try:
@@ -68,6 +72,7 @@ class BskyDataCollectorApp:
             return lang in ['en', 'pt', 'es']  # Aceita posts em inglês, português ou espanhol
         except Exception:
             return False
+
 
     # Função para extrair dados do Objeto CAR do Firehose
     def _extract_post_data(self, commit, op):
@@ -89,6 +94,7 @@ class BskyDataCollectorApp:
             st.toast(f"Erro ao extrair dados: {e}", icon=":material/dangerous:")
             return None
 
+
     # Thread para coleta de mensagens em segundo plano
     def _collect_messages_threaded(self, stop_event, data_queue):
         client = FirehoseSubscribeReposClient()
@@ -98,6 +104,7 @@ class BskyDataCollectorApp:
             st.toast(f"Erro na thread de coleta: {e}", icon=":material/dangerous:")
         finally:
             client.stop()
+
 
     # Função de Coleta de Posts
     def collect_data(self):
@@ -171,49 +178,84 @@ class BskyDataCollectorApp:
             return '' # Retorna string vazia se não for string
 
         # 1. Remover menções (ex: @usuario.bsky.social ou @usuario)
-        # Remove @ seguido por um ou mais caracteres não-espaço
         text = re.sub(r'@\S+', '', text)
         # 2. Remover URLs
-        # URLs completas (http/https)
         text = re.sub(r'http[s]?://\S+', '', text)
         # URLs que começam com www.
         text = re.sub(r'www\.\S+', '', text)
         # URLs do tipo domain.tld ou domain.tld/path (ex: example.com, bsky.app/profile/...)
-        # \b garante que estamos pegando palavras inteiras (evita pegar 'example.coma')
-        # [a-zA-Z0-9.-]+ : parte do domínio (pode ter subdomínios, hífens)
-        # \.[a-zA-Z]{2,6} : ponto seguido por um TLD de 2 a 6 letras (ex: .com, .social, .app)
-        # (/\S*)? : caminho opcional após a URL
         text = re.sub(r'\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\b(/\S*)?', '', text, flags=re.IGNORECASE)
         return text
+
+
+    # FUNÇÃO ADICIONADA PARA LIMPEZA DE MEMÓRIA
+    def _clear_sentiment_pipeline_memory(self):
+        if hasattr(self, 'sentiment_pipeline') and self.sentiment_pipeline is not None:
+            del self.sentiment_pipeline
+            self.sentiment_pipeline = None
+            if 'torch' in sys.modules and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
 
 
     # Função de análise de sentimentos usando o pipeline do Hugging Face
     # O "lxyuan/distilbert-base-multilingual-cased-sentiments-student" é o modelo de análise de sentimentos
     def analyze_sentiment(self, status_obj): 
-        if not self.sentiment_pipeline:
-            try:
-                self.sentiment_pipeline = pipeline(
-                    model="lxyuan/distilbert-base-multilingual-cased-sentiments-student",
-                    return_all_scores=False, 
-                )
-            except Exception as e:
-                st.error(f"Erro ao carregar o modelo de análise de sentimentos: {e}", icon=":material/error:")
-                status_obj.update(label="Falha ao carregar modelo de análise.", state="error", expanded=True)
+        try: # ADICIONADO PARA LIMPEZA DE MEMÓRIA (try-finally externo)
+            if not self.sentiment_pipeline:
+                try:
+                    status_obj.update(label="Carregando modelo de análise de sentimentos...") # Adicionado para feedback
+                    self.sentiment_pipeline = pipeline(
+                        model="lxyuan/distilbert-base-multilingual-cased-sentiments-student",
+                        return_all_scores=False, 
+                    )
+                    status_obj.update(label="Modelo carregado. Iniciando análise...") # Adicionado para feedback
+                except Exception as e:
+                    st.error(f"Erro ao carregar o modelo de análise de sentimentos: {e}", icon=":material/error:")
+                    status_obj.update(label="Falha ao carregar modelo de análise.", state="error", expanded=True)
+                    self._clear_sentiment_pipeline_memory() # ADICIONADO PARA LIMPEZA DE MEMÓRIA
+                    return
+
+            # Verifica se há dados ANTES de tentar acessá-los ou iterar
+            if not st.session_state.get('data') or not st.session_state.get('collection_ended'): # Modificado para checar 'data'
+                st.error("Não há dados coletados ou a coleta não foi finalizada para análise de sentimentos.", icon=":material/error:")
+                status_obj.update(label="Nenhum dado para analisar ou coleta não finalizada.", state="error", expanded=True)
+                self._clear_sentiment_pipeline_memory() # ADICIONADO PARA LIMPEZA DE MEMÓRIA
                 return
 
-        st.session_state['sentiment_results'] = [] 
-        updated_data_with_sentiment = []
-        if st.session_state['collection_ended'] and st.session_state['data']:
-            total_posts = len(st.session_state['data'])
+            st.session_state['sentiment_results'] = [] 
+            updated_data_with_sentiment = []
+            
+            if isinstance(st.session_state.get('data'), list): # Adicionada checagem de tipo
+                total_posts = len(st.session_state['data'])
+            else:
+                st.error("Formato de dados inválido para análise.", icon=":material/error:")
+                status_obj.update(label="Erro nos dados para análise.", state="error", expanded=True)
+                self._clear_sentiment_pipeline_memory() # ADICIONADO PARA LIMPEZA DE MEMÓRIA
+                return
+
             for i, post in enumerate(st.session_state['data']):
-                status_obj.update(label=f"Analisando post {i+1}/{total_posts}: \"{post['text'][:50]}...\"")
+                if not isinstance(post, dict) or 'text' not in post: # Adicionada checagem de post
+                    post_with_error = post.copy() if isinstance(post, dict) else {}
+                    post_with_error['sentiment'] = 'invalid_data_format'
+                    if 'text' not in post_with_error:
+                         post_with_error['text'] = "Dados do post ausentes ou malformados"
+                    updated_data_with_sentiment.append(post_with_error)
+                    st.session_state['sentiment_results'].append({'text': post_with_error['text'], 'sentiment': 'invalid_data_format'})
+                    continue
+
+                status_obj.update(label=f"Analisando post {i+1}/{total_posts}: \"{str(post['text'])[:50]}...\"")
                 try:
                     processed_text = self.preprocess_text(post['text'])
                     if not processed_text.strip(): 
                         sentiment = "neutral" 
                     else:
-                        result = self.sentiment_pipeline(processed_text)[0]
-                        sentiment = result['label']
+                        if self.sentiment_pipeline: # Adicionada checagem de pipeline
+                            result = self.sentiment_pipeline(processed_text)[0]
+                            sentiment = result['label']
+                        else:
+                            st.error("Pipeline de sentimento não encontrado durante a análise.", icon=":material/error:")
+                            sentiment = "pipeline_error"
                     
                     post_with_sentiment = post.copy() 
                     post_with_sentiment['sentiment'] = sentiment
@@ -221,17 +263,23 @@ class BskyDataCollectorApp:
                     st.session_state['sentiment_results'].append({'text': post['text'], 'sentiment': sentiment})
 
                 except Exception as e:
-                    st.error(f"Erro ao analisar o sentimento do post \"{post['text'][:50]}...\": {e}", icon=":material/error:")
+                    st.error(f"Erro ao analisar o sentimento do post \"{str(post['text'])[:50]}...\": {e}", icon=":material/error:")
                     post_with_error = post.copy()
                     post_with_error['sentiment'] = 'analysis_error' 
                     updated_data_with_sentiment.append(post_with_error)
+                    st.session_state['sentiment_results'].append({'text': post['text'], 'sentiment': 'analysis_error'})
+
 
             status_obj.update(label="Análise de sentimentos concluída!", state="complete", expanded=False)
             st.session_state['data'] = updated_data_with_sentiment 
-        else:
-            st.error("Não há dados coletados para análise de sentimentos.", icon=":material/error:")
-            status_obj.update(label="Nenhum dado para analisar.", state="error", expanded=True)
-            return
+            # self._clear_sentiment_pipeline_memory() # MOVIDO PARA O BLOCO FINALLY
+
+        # except Exception as outer_e: # Removido try-except interno para simplificar para um único finally
+        #     st.error(f"Erro inesperado na função analyze_sentiment: {outer_e}", icon=":material/error:")
+        #     status_obj.update(label="Erro crítico na análise.", state="error", expanded=True)
+        finally: # ADICIONADO PARA LIMPEZA DE MEMÓRIA (bloco finally externo)
+            self._clear_sentiment_pipeline_memory()
+
 
     # Pós-Coleta - Exibe os dados coletados
     def display_data(self):
@@ -373,6 +421,7 @@ class BskyDataCollectorApp:
         else:
             pass
 
+
     # Função Principal - Tela Inicial
     def run(self):
         st.markdown(f"<div style='text-align: left;'>{self.bskylogo_svg_template}</div>", unsafe_allow_html=True)
@@ -419,5 +468,3 @@ class BskyDataCollectorApp:
 if __name__ == "__main__":
     app = BskyDataCollectorApp()
     app.run()
-
-#commitonmain
