@@ -64,7 +64,8 @@ class BskyDataCollectorApp:
     # Função para detecção de Idioma
     def _is_portuguese(self, text):
         try:
-            return detect(text) == 'en' # Temporariamente alterado para 'en' para aumentar a quantidade de posts coletados
+            lang = detect(text)
+            return lang in ['en', 'pt', 'es']  # Aceita posts em inglês, português ou espanhol
         except Exception:
             return False
 
@@ -166,10 +167,23 @@ class BskyDataCollectorApp:
 
     # Função de pré-processamento de texto
     def preprocess_text(self, text):
-        # Remover URLs
-        text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
-        # Remover menções
-        text = re.sub(r'@\w+', '', text)
+        if not isinstance(text, str):
+            return '' # Retorna string vazia se não for string
+
+        # 1. Remover menções (ex: @usuario.bsky.social ou @usuario)
+        # Remove @ seguido por um ou mais caracteres não-espaço
+        text = re.sub(r'@\S+', '', text)
+        # 2. Remover URLs
+        # URLs completas (http/https)
+        text = re.sub(r'http[s]?://\S+', '', text)
+        # URLs que começam com www.
+        text = re.sub(r'www\.\S+', '', text)
+        # URLs do tipo domain.tld ou domain.tld/path (ex: example.com, bsky.app/profile/...)
+        # \b garante que estamos pegando palavras inteiras (evita pegar 'example.coma')
+        # [a-zA-Z0-9.-]+ : parte do domínio (pode ter subdomínios, hífens)
+        # \.[a-zA-Z]{2,6} : ponto seguido por um TLD de 2 a 6 letras (ex: .com, .social, .app)
+        # (/\S*)? : caminho opcional após a URL
+        text = re.sub(r'\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\b(/\S*)?', '', text, flags=re.IGNORECASE)
         return text
 
 
@@ -231,7 +245,7 @@ class BskyDataCollectorApp:
             num_is_reply = df_collected['reply_to'].notna().sum() if 'reply_to' in df_collected.columns else 0
 
             if st.session_state['collection_ended']:
-                st.toast(f"Coleta finalizada com sucesso!", icon=":material/check_circle:")
+                st.toast(f"Ação finalizada com sucesso!", icon=":material/check_circle:")
 
                 # ----- INÍCIO DAS ALTERAÇÕES NA LÓGICA DE EXIBIÇÃO DAS MÉTRICAS -----
                 if 'sentiment' in df_collected.columns and st.session_state.get('sentiment_results'):
@@ -274,6 +288,14 @@ class BskyDataCollectorApp:
 
             if 'sentiment' in df_collected.columns and st.session_state.get('sentiment_results'):
                 st.subheader("Resultados da Análise de Sentimentos")
+                st.sidebar.title("")
+                st.sidebar.warning(
+                    "- A análise ainda não é 100% precisa. Erros de classificação podem ocorrer em algumas postagens.\n"
+                    "- A análise de sentimentos é realizada automaticamente e pode não refletir a intenção original do autor da postagem.\n"
+                    "- Menções e URLs são removidos durante a análise, mas ainda são exibidos na tabela para fins de registro.\n"
+                    "- As postagens podem incluir termos ofensivos ou inadequados, pois não há filtragem de conteúdo."
+                )
+
                 columns_to_show = ['text', 'sentiment']
                 available_columns = [col for col in columns_to_show if col in df_collected.columns]
                 if available_columns == columns_to_show: 
@@ -288,6 +310,11 @@ class BskyDataCollectorApp:
                     st.dataframe(df_collected, use_container_width=True) 
             elif not df_collected.empty:
                 st.subheader("Dados Coletados")
+                st.sidebar.warning(
+                    "- Para executar a análise de sentimentos, clique em 'Analisar Sentimentos'.\n"
+                    "- Atenção: a análise pode levar vários minutos, dependendo da velocidade da sua conexão e da quantidade de dados coletados.\n"
+                    "- As postagens podem incluir termos ofensivos ou inadequados, pois não há filtragem de conteúdo.\n",
+                )
                 st.dataframe(df_collected, use_container_width=True)
             
             col1_buttons, col2_buttons, col3_buttons, col4_buttons = st.columns([1.5, 0.5, 1, 1]) 
@@ -349,17 +376,31 @@ class BskyDataCollectorApp:
     # Função Principal - Tela Inicial
     def run(self):
         st.markdown(f"<div style='text-align: left;'>{self.bskylogo_svg_template}</div>", unsafe_allow_html=True)
-        st.title("Bluesky Data Collector & Mood Analyzer")
+        st.text("")
+        st.text("")
+        # st.title("Bluesky Data Collector & Mood Analyzer")
 
         st.sidebar.markdown(self.bskylogo_svg_template, unsafe_allow_html=True)
         st.sidebar.title("BskyMood")
         st.sidebar.markdown("**Coleta e Análise de Sentimentos em Tempo Real no Bluesky**")
 
         if not st.session_state['collecting'] and not st.session_state['collection_ended']:
+            st.warning(
+                "Nenhum post coletado ainda. Clique no botão 'Iniciar Coleta' para começar.",
+                icon=":material/warning:"
+            )
+            st.sidebar.info(
+                "**Antes de começar**\n\n"
+                "- Selecione um intervalo de coleta e clique em 'Iniciar Coleta'.\n"
+                "- Intervalos maiores implicam em maior tempo de coleta e processamento. Defina um intervalo menor de coleta caso sua conexão à Internet seja lenta.\n"
+                "- As postagens podem incluir termos ofensivos ou inadequados, pois não há filtragem de conteúdo."
+            )
+            
             st.session_state['collection_duration'] = st.sidebar.slider(
                 "Duração da Coleta (segundos)", min_value=10, max_value=300, value=10, step=5, 
                 help="Defina por quanto tempo os posts serão coletados. Quanto mais longo, mais tempo de processamento será necessário."
             )
+            
             if st.sidebar.button("Iniciar Coleta", icon=":material/play_circle:", use_container_width=True, type="primary"):
                 st.session_state['data'] = []
                 st.session_state['sentiment_results'] = []
@@ -373,7 +414,10 @@ class BskyDataCollectorApp:
             
         if not st.session_state['collecting']: 
             self.display_data()
+            
 
 if __name__ == "__main__":
     app = BskyDataCollectorApp()
     app.run()
+
+#commitonmain
