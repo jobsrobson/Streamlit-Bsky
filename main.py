@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from atproto import FirehoseSubscribeReposClient, parse_subscribe_repos_message, CAR, IdResolver, DidInMemoryCache
-from stqdm import stqdm
 import time
 import multiprocessing
 import threading

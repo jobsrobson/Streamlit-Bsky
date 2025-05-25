@@ -13,10 +13,9 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python" alt="Python Version">
   <img src="https://img.shields.io/badge/Streamlit-Active-brightgreen.svg?style=for-the-badge&logo=streamlit" alt="Streamlit">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License: MIT">
+  <img src="https://img.shields.io/badge/License-GPL3-yellow.svg?style=for-the-badge" alt="License: MIT">
 </p>
 
----
 
 ## 📝 Sobre o Projeto
 
@@ -24,13 +23,13 @@
 
 Este projeto visa oferecer uma maneira prática de observar e analisar as tendências de sentimento e as conversas que ocorrem na plataforma Bluesky.
 
----
+
 
 ## 🎓 Contexto Acadêmico
 
 Este projeto foi desenvolvido como parte dos requisitos da disciplina **Tópicos Avançados em Ciências de Dados**, ministrada pelo **Prof. Alexandre Vaz**, no curso de Ciência de Dados e Inteligência Artificial do **Centro Universitário IESB**, em Brasília - DF.
 
----
+
 
 ## ✨ Funcionalidades Principais
 
@@ -46,7 +45,7 @@ Este projeto foi desenvolvido como parte dos requisitos da disciplina **Tópicos
 * **Download de Dados**: Permite fazer o download os dados coletados (incluindo a análise de sentimento) em formato JSON.
 * **Threading e Multiprocessing**: Utiliza threads para a coleta de dados em segundo plano, garantindo que a interface do usuário permaneça responsiva, e `multiprocessing.Queue` para comunicação segura entre a thread de coleta e o processo principal.
 
----
+
 
 ## 🛠️ Tecnologias Utilizadas
 
@@ -58,13 +57,13 @@ Este projeto foi desenvolvido como parte dos requisitos da disciplina **Tópicos
 * **Regex**: Para o pré-processamento e limpeza de texto.
 * **Threading & Multiprocessing**: Para operações concorrentes e responsividade da UI.
 
----
+
 
 ## 🚀 Como Acessar
 
 Acesse o app através do Streamlit Community Cloud: [**BskyMood**](https://bskymood.streamlit.app).
 
----
+
 
 ## 📊 Exemplo de Uso
 
@@ -79,19 +78,18 @@ Acesse o app através do Streamlit Community Cloud: [**BskyMood**](https://bskym
 9.  Clique em **Reiniciar Coleta** para limpar todos os dados e começar novamente.
 
 
----
 
 ## 🤝 Contribuições
 
 Contribuições são bem-vindas! Se você tiver sugestões para melhorar o BskyMood, sinta-se à vontade para abrir uma *issue* ou enviar um *pull request*.
 
----
+
 
 ## 📄 Licença
 
-Este projeto está licenciado sob a Licença MIT. Veja o ficheiro `LICENSE` para mais detalhes.
+Este projeto está licenciado sob a Licença GPL-3. Veja o arquivo `LICENSE` para mais detalhes.
 
----
+
 
 <p align="center">
   Feito com ❤️ e Python
