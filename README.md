@@ -17,7 +17,7 @@
 </p>
 
 
-![BskyMood Screenshot](https://github.com/jobsrobson/Streamlit-Bsky/blob/main/screenshot.png?raw=true)
+![BskyMood Screenshot](https://github.com/jobsrobson/Streamlit-Bsky/blob/main/screenshot_gradia.png?raw=true)
 
 
 ## 📝 Sobre o Projeto
