@@ -17,6 +17,9 @@
 </p>
 
 
+![BskyMood Screenshot](https://github.com/jobsrobson/Streamlit-Bsky/blob/main/screenshot.png?raw=true)
+
+
 ## 📝 Sobre o Projeto
 
 **BskyMood** é uma aplicação web desenvolvida em Python com Streamlit, projetada para interagir com a rede social Bluesky. A ferramenta permite coletar publicações (<em>skeets</em>) em tempo real através da API Firehose, realizar uma análise de sentimentos multilíngue (inglês, português e espanhol) sobre o conteúdo textual dessas publicações e, em seguida, apresentar os resultados de forma interativa. Os dados coletados, enriquecidos com a classificação de sentimento (positivo, negativo ou neutro), podem ser visualizados e descarregados em formato JSON.
