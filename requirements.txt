@@ -14,3 +14,4 @@ nltk
 wordcloud
 scikit-learn
 altair
+emoji

@@ -9,6 +9,7 @@ from langdetect import detect
 import queue
 from datetime import datetime
 from transformers import pipeline
+import emoji
 
 class BskyDataCollectorApp:
     def __init__(self):
@@ -55,13 +56,14 @@ class BskyDataCollectorApp:
             for op in commit.ops:
                 if op.action == 'create' and op.path.startswith('app.bsky.feed.post/'):
                     post_data = self._extract_post_data(commit, op)
-                    if post_data and self._is_portuguese(post_data['text']): 
+                    if post_data and self._lang_selector(post_data['text']): 
                         data_queue.put(post_data)
         except Exception as e:
             print(f"Error processing message in thread: {e}")
 
+
     # Função para detecção de Idioma
-    def _is_portuguese(self, text):
+    def _lang_selector(self, text):
         try:
             lang = detect(text)
             return lang in ['en', 'pt', 'es']  # Aceita posts em inglês, português ou espanhol
@@ -88,6 +90,7 @@ class BskyDataCollectorApp:
             st.toast(f"Erro ao extrair dados: {e}", icon=":material/dangerous:")
             return None
 
+
     # Thread para coleta de mensagens em segundo plano
     def _collect_messages_threaded(self, stop_event, data_queue):
         client = FirehoseSubscribeReposClient()
@@ -97,6 +100,7 @@ class BskyDataCollectorApp:
             st.toast(f"Erro na thread de coleta: {e}", icon=":material/dangerous:")
         finally:
             client.stop()
+
 
     # Função de Coleta de Posts
     def collect_data(self):
@@ -169,20 +173,15 @@ class BskyDataCollectorApp:
         if not isinstance(text, str):
             return '' # Retorna string vazia se não for string
 
-        # 1. Remover menções (ex: @usuario.bsky.social ou @usuario)
-        # Remove @ seguido por um ou mais caracteres não-espaço
+        # 1. Remover menções
         text = re.sub(r'@\S+', '', text)
         # 2. Remover URLs
-        # URLs completas (http/https)
         text = re.sub(r'http[s]?://\S+', '', text)
-        # URLs que começam com www.
         text = re.sub(r'www\.\S+', '', text)
-        # URLs do tipo domain.tld ou domain.tld/path (ex: example.com, bsky.app/profile/...)
-        # \b garante que estamos pegando palavras inteiras (evita pegar 'example.coma')
-        # [a-zA-Z0-9.-]+ : parte do domínio (pode ter subdomínios, hífens)
-        # \.[a-zA-Z]{2,6} : ponto seguido por um TLD de 2 a 6 letras (ex: .com, .social, .app)
-        # (/\S*)? : caminho opcional após a URL
         text = re.sub(r'\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\b(/\S*)?', '', text, flags=re.IGNORECASE)
+         # 3. Transformar emojis em texto (ex: "🐍" -> ":cobra:")
+        text = emoji.demojize(text, language='en')
+
         return text
 
 
@@ -418,5 +417,3 @@ class BskyDataCollectorApp:
 if __name__ == "__main__":
     app = BskyDataCollectorApp()
     app.run()
-
-#commitonmain
