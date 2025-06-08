@@ -64,6 +64,10 @@ Devido à alta demanda de recursos (RAM e CPU) dos modelos de Machine Learning, 
 
 **Clique no botão acima para abrir o notebook no Google Colab** e siga as instruções contidas nele para instalar as dependências e executar o aplicativo.
 
+Se você quiser usar o Streamlit Community Cloud, basta acessá-lo abaixo. Lembre-se que a execução do BskyMood não é garantida e pode demorar ou falhar neste ambiente.
+
+[![Streamlit](https://img.shields.io/badge/Streamlit-%23FE4B4B.svg?style=for-the-badge&logo=streamlit&logoColor=white)](https://bskymood.streamlit.app/)
+
 ## 📊 Exemplo de Uso
 
 1.  Abra o notebook no Google Colab e execute as células de instalação e configuração.
