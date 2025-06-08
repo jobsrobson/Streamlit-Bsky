@@ -16,12 +16,13 @@ from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
 import nltk
 
-# Tentar baixar stopwords, se não conseguir, avisar. (BLOCO ALTERADO CONFORME SOLICITADO)
+# Download das Stopwords do NLTK
 try:
   nltk.download('stopwords', quiet=True)
 except Exception as e:
-  # Não bloquear se o download falhar, BERTopic pode funcionar sem, ou o usuário pode instalar manualmente.
-  print(f"Alerta: Não foi possível baixar stopwords do NLTK: {e}. A modelagem de tópicos pode prosseguir com as configurações padrão do BERTopic.")
+  # Não bloquear a UI se o download falhar, BERTopic pode funcionar sem, ou o usuário pode instalar manualmente.
+  st.toast(f"Alerta: Não foi possível baixar stopwords do NLTK: {e}. A modelagem de tópicos irá prosseguir com as configurações padrão do BERTopic.", icon="⚠️")
+  print(f"Alerta: Não foi possível baixar stopwords do NLTK: {e}. A modelagem de tópicos irá prosseguir com as configurações padrão do BERTopic.")
 
 class BskyDataCollectorApp:
     def __init__(self):
@@ -293,10 +294,7 @@ class BskyDataCollectorApp:
                 st.warning("Inconsistência no número de posts e resultados de tópicos. Não foi possível adicionar topic_id aos dados.")
 
             topic_info_df = self.topic_model.get_topic_info()
-            # DEBUG: Para verificar as colunas retornadas por get_topic_info()
-            # print("Colunas de topic_info_df IMEDIATAMENTE após get_topic_info():", topic_info_df.columns.tolist())
-
-
+            
             posts_df_for_topic_sentiment = pd.DataFrame(st.session_state['data'])
 
             if 'sentiment' in posts_df_for_topic_sentiment.columns and 'topic_id' in posts_df_for_topic_sentiment.columns:
@@ -317,10 +315,9 @@ class BskyDataCollectorApp:
                     if col_name in sentiment_by_topic.columns:
                         sentiment_by_topic[col_name] = (sentiment_by_topic[col_name] * 100).round(1)
 
-                # Verificar se a coluna 'Topic' existe em topic_info_df antes do merge
                 if 'Topic' in topic_info_df.columns:
                     topic_info_df = topic_info_df.merge(sentiment_by_topic, left_on='Topic', right_index=True, how='left')
-                    topic_info_df.fillna(0, inplace=True) # Preenche NaNs com 0 para tópicos sem certos sentimentos ou para colunas de sentimento que não existiam
+                    topic_info_df.fillna(0, inplace=True)
                 else:
                     st.warning("Coluna 'Topic' não encontrada no DataFrame de informações do tópico. Não foi possível mesclar com os sentimentos por tópico.", icon="⚠️")
             else:
@@ -348,7 +345,7 @@ class BskyDataCollectorApp:
 
             if st.session_state['collection_ended'] and not st.session_state.get('performing_topic_analysis', False) and not st.session_state.get('collecting', False) :
                 if not st.session_state.get('topics_analyzed_toast_shown', False) and not st.session_state.get('sentiment_analysis_toast_shown', False):
-                     st.toast(f"Ação de coleta finalizada com sucesso!", icon=":material/check_circle:")
+                     st.toast(f"Ação finalizada com sucesso!", icon=":material/check_circle:")
 
             if 'sentiment' in df_collected.columns and st.session_state.get('sentiment_results') and not st.session_state.get('topics_analyzed'):
                 total_analyzed = len(df_collected)
@@ -396,7 +393,7 @@ class BskyDataCollectorApp:
                 st.subheader("Dados Coletados")
                 st.sidebar.warning(
                     "- Para executar a análise de sentimentos individuais, clique em 'Analisar Sentimentos'.\n"
-                    "- Para executar a análise de tópicos, colete dados e clique em 'Analisar Tópicos'.\n"
+                    "- Para executar a análise de tópicos, conclua a análise de sentimentos primeiro.\n"
                     "- Atenção: as análises podem levar vários minutos.\n"
                     "- As postagens podem incluir termos ofensivos ou inadequados, pois não há filtragem de conteúdo.\n",
                 )
@@ -404,7 +401,6 @@ class BskyDataCollectorApp:
                 if 'topic_id' in df_collected.columns:
                     cols_to_display.append('topic_id')
                 
-                # Garantir que apenas colunas existentes sejam selecionadas
                 cols_to_display_existing = [col for col in cols_to_display if col in df_collected.columns]
                 st.dataframe(df_collected[cols_to_display_existing], use_container_width=True)
 
@@ -424,16 +420,33 @@ class BskyDataCollectorApp:
                      st.button("Analisar Sentimentos", icon=":material/psychology:", use_container_width=True, type="primary", help="Sentimentos individuais já analisados.", disabled=True)
 
             with col2_buttons:
-                if not st.session_state.get('topics_analyzed', False) and not df_collected.empty:
-                    if st.button("Analisar Tópicos", icon=":material/hub:", use_container_width=True, type="primary", help="Clique para extrair tópicos e analisar sentimentos por tópico."):
-                        with status_container_topics.status("Preparando para análise de tópicos...", expanded=True) as status_topic:
-                            self.perform_topic_modeling_and_sentiment(status_topic)
-                        st.session_state['topics_analyzed_toast_shown'] = True
-                        st.rerun()
-                elif st.session_state.get('topics_analyzed', False):
-                     st.button("Analisar Tópicos", icon=":material/hub:", use_container_width=True, type="primary", help="Tópicos já analisados.", disabled=True)
-                elif df_collected.empty:
-                     st.button("Analisar Tópicos", icon=":material/hub:", use_container_width=True, type="primary", help="Colete dados primeiro.", disabled=True)
+                # *** INÍCIO DA MODIFICAÇÃO: Lógica para desabilitar o botão "Analisar Tópicos" ***
+                sentiment_analysis_done = 'sentiment' in df_collected.columns
+                topics_already_analyzed = st.session_state.get('topics_analyzed', False)
+
+                # Definir a condição para desabilitar o botão
+                disable_topic_button = topics_already_analyzed or not sentiment_analysis_done
+
+                # Definir a mensagem de ajuda (tooltip) com base no motivo do bloqueio
+                if topics_already_analyzed:
+                    help_text = "Tópicos já analisados."
+                elif not sentiment_analysis_done:
+                    help_text = "Execute a 'Análise de Sentimentos' primeiro."
+                else:
+                    help_text = "Clique para extrair tópicos e analisar sentimentos por tópico."
+
+                if st.button("Analisar Tópicos", 
+                             icon=":material/hub:", 
+                             use_container_width=True, 
+                             type="primary", 
+                             help=help_text, 
+                             disabled=disable_topic_button):
+                    
+                    with status_container_topics.status("Preparando para análise de tópicos...", expanded=True) as status_topic:
+                        self.perform_topic_modeling_and_sentiment(status_topic)
+                    st.session_state['topics_analyzed_toast_shown'] = True
+                    st.rerun()
+                # *** FIM DA MODIFICAÇÃO ***
 
             with col3_buttons:
                 if st.button("Reiniciar Coleta", on_click=lambda: st.session_state.update({
@@ -464,7 +477,6 @@ class BskyDataCollectorApp:
                 else:
                     st.button("Baixar Dados", disabled=True, use_container_width=True, help="Nenhum dado para baixar.", icon=":material/download:")
             
-            # ----- SEÇÃO DE EXIBIÇÃO DA ANÁLISE DE TÓPICOS (REVISADA) -----
             if st.session_state.get('topics_analyzed', False) and not st.session_state.get('topic_info_df', pd.DataFrame()).empty:
                 st.markdown("---")
                 st.subheader("Análise de Tópicos e Sentimentos por Tópico")
@@ -479,26 +491,20 @@ class BskyDataCollectorApp:
 
                 source_topic_df = st.session_state['topic_info_df'].copy()
                 
-                # Definição do mapa de renomeação e colunas de sentimento
                 rename_map = {'Topic': 'ID Tópico', 'Count': 'Nº Posts', 'Name': 'Palavras-Chave'}
                 sentiment_cols_original = ['Positive (%)', 'Negative (%)', 'Neutral (%)', 'Error (%)']
                 
-                # Renomear colunas que existem no source_topic_df e estão no rename_map
                 display_df = source_topic_df.rename(columns={k: v for k, v in rename_map.items() if k in source_topic_df.columns})
 
-                # Construir a lista de colunas para exibição final
                 cols_for_display_final = []
-                # Adicionar colunas básicas renomeadas, se a coluna original existia
                 for original_name, new_name in rename_map.items():
-                    if original_name in source_topic_df.columns: # Verifica se a coluna original estava lá
-                        cols_for_display_final.append(new_name) # Adiciona o nome novo à lista de exibição
+                    if original_name in source_topic_df.columns:
+                        cols_for_display_final.append(new_name)
                 
-                # Adicionar colunas de sentimento (que não foram renomeadas pelo rename_map)
                 for sent_col in sentiment_cols_original:
-                    if sent_col in display_df.columns: # Verifica se a coluna de sentimento existe no display_df (após merge)
+                    if sent_col in display_df.columns:
                         cols_for_display_final.append(sent_col)
                 
-                # Formatar a coluna 'Palavras-Chave' se ela foi corretamente renomeada de 'Name'
                 if 'Palavras-Chave' in display_df.columns and 'Name' in source_topic_df.columns:
                     try:
                         display_df['Palavras-Chave'] = display_df['Palavras-Chave'].apply(
@@ -507,8 +513,6 @@ class BskyDataCollectorApp:
                     except Exception as e:
                         st.warning(f"Não foi possível formatar a coluna 'Palavras-Chave': {e}")
                 
-                # Garantir que a lista final contenha apenas colunas que REALMENTE existem em display_df
-                # Isso é uma salvaguarda extra.
                 cols_for_display_final = [col for col in cols_for_display_final if col in display_df.columns]
 
                 if not cols_for_display_final:
@@ -524,18 +528,58 @@ class BskyDataCollectorApp:
                 if topic_model_instance:
                     try:
                         st.subheader("Visualizações dos Tópicos")
-                        fig_topics = topic_model_instance.visualize_topics(top_n_topics=10)
-                        st.plotly_chart(fig_topics, use_container_width=True)
+                        
+                        num_topics_available = 0
+                        if not st.session_state.get('topic_info_df', pd.DataFrame()).empty:
+                            num_topics_available = len(st.session_state['topic_info_df'])
 
-                        fig_barchart = topic_model_instance.visualize_barchart(top_n_topics=10)
-                        st.plotly_chart(fig_barchart, use_container_width=True)
+                        if num_topics_available > 0:
+                            st.write(f"Exibindo visualizações para os {num_topics_available} agrupamentos de tópicos identificados.")
+                            
+                            fig_topics = topic_model_instance.visualize_topics(top_n_topics=num_topics_available)
+                            st.plotly_chart(fig_topics, use_container_width=True)
+
+                            with st.expander("🗺️ O que esse Gráfico mostra?", expanded=False):
+                                st.markdown("""
+                                - Pense nele como um mapa onde cada cidade é um tópico. A posição das "cidades" (círculos) não é aleatória; ela representa a similaridade entre os tópicos.
+                                - Cada Círculo é um Tópico: Cada bolha no gráfico representa um dos tópicos que o modelo encontrou. Ao passar o mouse sobre um círculo, você verá seu número de identificação e as palavras-chave que o definem.
+                                - O Tamanho dos Círculos: O tamanho de cada círculo é proporcional à frequência do tópico, ou seja, ao número de posts que foram classificados naquele tópico.
+                                    - Círculos grandes: Tópicos muito populares, com muitos posts associados.
+                                    - Círculos pequenos: Tópicos de nicho, com menos posts.
+                                - A Posição e a Distância no Gráfico: Esta é a parte mais importante. Os tópicos são plotados de forma que a distância entre eles represente sua similaridade semântica.
+                                    - Tópicos Próximos: Tópicos que aparecem perto um do outro no mapa são semanticamente semelhantes. Eles usam vocabulário parecido ou discutem assuntos relacionados. Por exemplo, um tópico sobre "eleições" pode estar perto de um sobre "economia".
+                                    - Tópicos Distantes: Tópicos que estão longe uns dos outros são semanticamente diferentes. Por exemplo, um tópico sobre "receitas de bolo" estaria muito longe de um sobre "manutenção de carros".
+                            """, unsafe_allow_html=True)
+
+                            barchart_min_height_per_topic = 10 
+                            barchart_base_height = 1
+                            barchart_height = (num_topics_available * barchart_min_height_per_topic) + barchart_base_height
+                            if barchart_height < 400: 
+                                barchart_height = 400
+                            
+                            fig_barchart = topic_model_instance.visualize_barchart(
+                                top_n_topics=num_topics_available,
+                                height=barchart_height,
+                                n_words=5
+                            )
+                            st.plotly_chart(fig_barchart, use_container_width=True)
+                            with st.expander("📊 O que esse Gráfico mostra?", expanded=False):
+                                st.markdown("""
+                                - Diferente do mapa anterior que mostrava a relação entre os tópicos, este gráfico olha para dentro de cada um deles.
+                                - Cada Sub-gráfico é um Tópico: O gráfico é dividido em vários gráficos de barras menores. Cada um desses sub-gráficos corresponde a um único tópico e é identificado por seu título (ex: "Topic 0", "Topic 1", etc.).
+                                - As Barras e Suas Palavras: Dentro de cada sub-gráfico, cada barra representa uma única palavra. Cada gráfico mostra as 5 palavras mais importantes para cada tópico.
+                                - O Comprimento das Barras (Score c-TF-IDF): Este é o conceito central. O comprimento de cada barra não é a contagem da palavra. Ele representa o score c-TF-IDF daquela palavra dentro daquele tópico.
+                                    - 💡 O que é c-TF-IDF? É uma métrica que o BERTopic usa para medir a importância de uma palavra para um tópico específico. Uma palavra com um score c-TF-IDF alto é muito característica daquele tópico e não apenas uma palavra comum em geral. Por exemplo, a palavra "gato" pode ter um score altíssimo no tópico sobre animais de estimação, mesmo que a palavra "disse" apareça mais vezes em todo o conjunto de dados.
+                                """, unsafe_allow_html=True)
+                        else:
+                            st.info("Não há tópicos suficientes para gerar visualizações gráficas.")
+                            
                     except Exception as e:
                         st.warning(f"Não foi possível gerar visualizações dos tópicos: {e}", icon="⚠️")
             
             if st.session_state.get('topics_analyzed', False) and not df_collected.empty:
                 st.markdown("---")
                 st.subheader("Dados Coletados Detalhados (com ID do Tópico)")
-                # Selecionar colunas de forma segura para exibição
                 cols_to_show_detailed = df_collected.columns.tolist()
                 st.dataframe(df_collected[cols_to_show_detailed], use_container_width=True)
 

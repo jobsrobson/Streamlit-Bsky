@@ -2,6 +2,7 @@ atproto==0.0.61
 streamlit
 transformers
 torch
+bertopic
 sentencepiece
 stqdm
 langdetect
