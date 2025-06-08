@@ -1,98 +1,88 @@
 <p align="center">
-  <svg width="35" height="35" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-    <path d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805ZM50.127 3.805C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745Z" fill="#0085ff"/>
-  </svg>
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Bluesky_Logo.svg/869px-Bluesky_Logo.svg.png" alt="Bluesky Logo" width="32"/>
 </p>
 
 <h1 align="center">BskyMood</h1>
 
 <p align="center">
-  <strong>Coleta e Análise de Sentimentos em Tempo Real no Bluesky</strong>
+  <strong>Coleta, Análise de Sentimentos e Modelagem de Tópicos em Tempo Real no Bluesky</strong>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python" alt="Python Version">
   <img src="https://img.shields.io/badge/Streamlit-Active-brightgreen.svg?style=for-the-badge&logo=streamlit" alt="Streamlit">
-  <img src="https://img.shields.io/badge/License-GPL3-yellow.svg?style=for-the-badge" alt="License: MIT">
+  <img src="https://img.shields.io/badge/License-GPL--3.0-yellow.svg?style=for-the-badge" alt="License: GPL-3.0">
 </p>
 
-
-![BskyMood Screenshot](https://github.com/jobsrobson/Streamlit-Bsky/blob/main/screenshot_gradia.png?raw=true)
+<p align="center">
+  <img src="https://github.com/jobsrobson/Streamlit-Bsky/blob/main/screenshot_gradia.png?raw=true" alt="Screenshot do BskyMood" width="800"/>
+</p>
 
 
 ## 📝 Sobre o Projeto
 
-**BskyMood** é uma aplicação web desenvolvida em Python com Streamlit, projetada para interagir com a rede social Bluesky. A ferramenta permite coletar publicações (<em>skeets</em>) em tempo real através da API Firehose, realizar uma análise de sentimentos multilíngue (inglês, português e espanhol) sobre o conteúdo textual dessas publicações e, em seguida, apresentar os resultados de forma interativa. Os dados coletados, enriquecidos com a classificação de sentimento (positivo, negativo ou neutro), podem ser visualizados e descarregados em formato JSON.
+**BskyMood** é uma aplicação web desenvolvida em Python com Streamlit, projetada para interagir com a rede social Bluesky. A ferramenta permite coletar publicações (*skeets*) em tempo real, realizar uma **análise de sentimentos** multilíngue (inglês, português e espanhol) e, em seguida, aplicar técnicas de **modelagem de tópicos com BERTopic** para descobrir os principais temas de discussão.
 
-Este projeto visa oferecer uma maneira prática de observar e analisar as tendências de sentimento e as conversas que ocorrem na plataforma Bluesky.
-
-
+O aplicativo agrega os sentimentos por tópico, oferecendo insights sobre a percepção geral de cada tema, e apresenta os resultados em uma interface interativa. Os dados coletados, enriquecidos com as análises, podem ser visualizados e descarregados em formato JSON.
 
 ## 🎓 Contexto Acadêmico
 
 Este projeto foi desenvolvido como parte dos requisitos da disciplina **Tópicos Avançados em Ciências de Dados**, ministrada pelo **Prof. Alexandre Vaz**, no curso de Ciência de Dados e Inteligência Artificial do **Centro Universitário IESB**, em Brasília - DF.
 
-
-
 ## ✨ Funcionalidades Principais
 
 * **Coleta em Tempo Real**: Conecta-se ao Firehose do Bluesky para capturar publicações assim que são criadas.
 * **Filtragem de Idioma**: Foca em publicações nos idiomas inglês, português e espanhol.
-* **Pré-processamento de Texto**: Limpa o texto das publicações removendo menções, URLs e outros ruídos antes da análise.
-* **Análise de Sentimentos Multilíngue**: Utiliza o modelo `lxyuan/distilbert-base-multilingual-cased-sentiments-student` da Hugging Face para classificar o sentimento das publicações como positivo, negativo ou neutro.
+* **Análise de Sentimentos Multilíngue**: Utiliza o modelo `lxyuan/distilbert-base-multilingual-cased-sentiments-student` da Hugging Face para classificar o sentimento de cada post.
+* **Modelagem de Tópicos com BERTopic**: Identifica automaticamente os temas latentes nas publicações coletadas, agrupando conversas por similaridade semântica.
+* **Análise de Sentimento Agregada**: Após a identificação dos tópicos, calcula e exibe a distribuição de sentimentos (positivo, negativo, neutro) para cada um deles.
 * **Interface Interativa com Streamlit**:
     * Permite ao usuário definir a duração da coleta.
-    * Exibe o status da coleta e da análise de sentimentos.
-    * Apresenta os dados coletados e os resultados da análise em tabelas e métricas resumidas.
-    * Oferece botões para iniciar/parar a coleta, reiniciar o processo e analisar sentimentos.
-* **Download de Dados**: Permite fazer o download os dados coletados (incluindo a análise de sentimento) em formato JSON.
-* **Threading e Multiprocessing**: Utiliza threads para a coleta de dados em segundo plano, garantindo que a interface do usuário permaneça responsiva, e `multiprocessing.Queue` para comunicação segura entre a thread de coleta e o processo principal.
-
-
+    * Apresenta os dados coletados e os resultados das análises em tabelas e métricas.
+    * Controla o fluxo de análise com botões para iniciar a coleta, analisar sentimentos e, em seguida, analisar tópicos.
+    * Exibe visualizações interativas dos tópicos, como o Mapa de Distância Entre Tópicos e o Gráfico de Palavras por Tópico.
+* **Download de Dados**: Permite baixar todos os dados coletados e enriquecidos (sentimento e ID do tópico) em formato JSON.
+* **Execução Concorrente**: Utiliza `threading` para a coleta de dados em segundo plano, garantindo que a interface do usuário permaneça sempre responsiva.
 
 ## 🛠️ Tecnologias Utilizadas
 
 * **Python 3.10+**
 * **Streamlit**: Para a criação da interface web interativa.
+* **BERTopic**: Para a modelagem de tópicos.
+* **Hugging Face Transformers**: Para carregar e utilizar o modelo de análise de sentimentos.
 * **AT Protocol SDK (`atproto`)**: Para interagir com a API Firehose do Bluesky.
-* **Hugging Face Transformers (`transformers`)**: Para carregar e utilizar o modelo de análise de sentimentos.
+* **Scikit-learn**: Dependência para `BERTopic` e vetorização de texto.
+* **NLTK**: Para processamento de linguagem natural (stopwords).
 * **Langdetect**: Para a detecção do idioma das publicações.
-* **Regex**: Para o pré-processamento e limpeza de texto.
-* **Threading & Multiprocessing**: Para operações concorrentes e responsividade da UI.
+* **Pandas**, **Regex**, **Threading**.
 
+## 🚀 Como Executar o Projeto
 
+Devido à alta demanda de recursos (RAM e CPU) dos modelos de Machine Learning, a execução na nuvem gratuita do Streamlit (Community Cloud) não é estável. A execução é recomendada através do **Google Colab**, que oferece um ambiente mais robusto.
 
-## 🚀 Como Acessar
+[![Abrir no Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Z01zVHUmpupHSprcJwtO1Sdh9zN7tKO3?usp=sharing)
 
-Acesse o app através do Streamlit Community Cloud: [**BskyMood**](https://bskymood.streamlit.app).
-
-
+**Clique no botão acima para abrir o notebook no Google Colab** e siga as instruções contidas nele para instalar as dependências e executar o aplicativo.
 
 ## 📊 Exemplo de Uso
 
-1.  Ao abrir o app, você verá a interface inicial.
-2.  Na barra lateral, defina a **Duração da Coleta** desejada em segundos.
-3.  Clique em **Iniciar Coleta**. O app começará a buscar publicações do Bluesky.
-4.  Um botão **Parar Coleta** aparecerá, permitindo interromper o processo a qualquer momento.
-5.  Após a coleta (ou interrupção), os dados brutos serão exibidos.
-6.  Clique em **Analisar Sentimentos** para processar as publicações coletadas.
-7.  Os resultados da análise, incluindo a classificação de sentimento para cada post e métricas agregadas, serão exibidos.
-8.  Utilize o botão **Baixar Dados** para salvar os resultados em um arquivo JSON.
-9.  Clique em **Reiniciar Coleta** para limpar todos os dados e começar novamente.
-
-
+1.  Abra o notebook no Google Colab e execute as células de instalação e configuração.
+2.  Na célula final, uma URL pública será gerada. Abra-a em seu navegador.
+3.  Na interface do BskyMood, defina a **Duração da Coleta** desejada na barra lateral.
+4.  Clique em **Iniciar Coleta**.
+5.  Após a coleta, os dados brutos serão exibidos. Clique em **Analisar Sentimentos**.
+6.  Com os sentimentos analisados, o botão **Analisar Tópicos** será habilitado. Clique nele.
+7.  Explore os resultados! Navegue pela tabela de tópicos, os gráficos interativos e a tabela de dados detalhados, que agora inclui a classificação de sentimento e o ID do tópico para cada post.
+8.  Utilize o botão **Baixar Dados** para salvar um arquivo JSON completo com os resultados.
+9.  Clique em **Reiniciar Coleta** para limpar a memória e começar uma nova análise.
 
 ## 🤝 Contribuições
 
-Contribuições são bem-vindas! Se você tiver sugestões para melhorar o BskyMood, sinta-se à vontade para abrir uma *issue* ou enviar um *pull request*.
-
-
+Contribuições são bem-vindas! Se você tiver sugestões para melhorar o BskyMood, sinta-à-vontade para abrir uma *issue* ou enviar um *pull request*.
 
 ## 📄 Licença
 
-Este projeto está licenciado sob a Licença GPL-3. Veja o arquivo `LICENSE` para mais detalhes.
-
-
+Este projeto está licenciado sob a Licença GPL-3.0. Veja o arquivo `LICENSE` para mais detalhes.
 
 <p align="center">
   Feito com ❤️ e Python
