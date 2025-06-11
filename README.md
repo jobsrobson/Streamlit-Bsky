@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/jobsrobson/Streamlit-Bsky/blob/main/screenshot_gradia.png?raw=true" alt="Screenshot do BskyMood" width="800"/>
+  <img src="https://github.com/jobsrobson/Streamlit-Bsky/blob/main/screenshot2.png?raw=true" alt="Screenshot do BskyMood" width="800"/>
 </p>
 
 
