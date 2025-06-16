@@ -5,7 +5,7 @@
 <h1 align="center">BskyMood</h1>
 
 <p align="center">
-  <strong>Coleta, Análise de Sentimentos e Modelagem de Tópicos em Tempo Real no Bluesky</strong>
+  <strong>Coleta em Tempo Real, Análise de Sentimentos e Modelagem de Tópicos no Bluesky</strong>
 </p>
 
 <p align="center">
